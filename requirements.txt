@@ -1,0 +1,40 @@
+# Core Python Version
+# Requires Python 3.12.6
+
+# API and HTTP Requests
+requests>=2.31.0
+urllib3>=2.2.1
+
+# Data Manipulation
+pandas>=2.2.1
+numpy>=1.26.3
+
+# Machine Learning and Text Processing
+scikit-learn>=1.4.1
+scipy>=1.12.0
+
+# Optional: Advanced Text Processing
+nltk>=3.8.1
+
+# Optional: Enhanced Performance
+numba>=0.59.0
+
+# Optional: Caching and Performance
+cachetools>=5.3.3
+
+# Optional: Environment Management
+python-dotenv>=1.0.1
+
+# Development and Debugging
+ipython>=8.22.2
+pytest>=8.0.2
+
+# Type Checking (Optional but Recommended)
+mypy>=1.9.0
+types-requests>=2.31.0
+
+# Security
+certifi>=2024.2.2
+
+# Logging
+structlog>=24.1.0
