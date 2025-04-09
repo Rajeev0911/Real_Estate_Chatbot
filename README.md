@@ -5,4 +5,4 @@
 
 ### install dependencies -> pip install -r requirements.txt
 
-### start app -> app.py
+### start app -> python app.py
