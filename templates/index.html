@@ -4,33 +4,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>AI Real Estate Assistant</title>
-    <link rel="stylesheet" href="../static//styles.css">
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-</head>
-<body>
-    <div id="avatar-container">
-        <div id="avatar"></div>
-    </div>
-    <div id="chat-container">
-        <div class="message agent">Hello! I'm your AI real estate assistant. How can I assist you today?</div>
-    </div>
-    <div id="controls">
-        <button class="control-btn" id="mic-btn" title="Speak">🎤</button>
-        <button class="control-btn" id="speaker-btn" title="Toggle Audio">🔊</button>
-    </div>
-    <script src="../static/scripts.js"></script>
-</body>
-</html> -->
-
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>AI Real Estate Assistant</title>
     <link rel="stylesheet" href="../static/styles.css">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <!-- <script src="https://cdn.jsdelivr.net/npm/lucide@latest/dist/umd/lucide.min.js"></script> -->
     <script src="https://cdn.jsdelivr.net/npm/lucide@latest/dist/umd/lucide.js">function toggleSpeakerIcon() {
         const speakerBtn = document.getElementById('speaker-btn');
         const icon = speakerBtn.querySelector('i');
@@ -44,7 +19,6 @@
         <div id="avatar"></div>
     </div>
     <div id="chat-container">
-        <div class="message agent">Hello! I'm your AI real estate assistant. How can I assist you today?</div>
     </div>
     <div id="input-container">
         <input type="text" id="user-input" placeholder="Type your message here...">
@@ -59,5 +33,78 @@
         updateIcons();
     </script>
     <script src="../static/scripts.js"></script>
+</body>
+</html> -->
+
+
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Real Estate Assistant</title>
+  <link rel="stylesheet" href="../static/styles.css">
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <!-- Optional: Lucide icons script -->
+  <script src="https://cdn.jsdelivr.net/npm/lucide@latest/dist/umd/lucide.js">
+    function toggleSpeakerIcon() {
+      const speakerBtn = document.getElementById('speaker-btn');
+      const icon = speakerBtn.querySelector('i');
+      icon.setAttribute('data-lucide', icon.getAttribute('data-lucide') === 'volume-2' ? 'volume-x' : 'volume-2');
+      updateIcons();
+    }
+  </script>
+</head>
+<body>
+  <!-- Chat Toggle Button (floating at bottom-right) -->
+  <button id="chatbot-toggle" title="Chat with us">Chat</button>
+  
+  <!-- Chat Widget Dialog -->
+  <div id="chat-widget-dialog">
+    <!-- Close Button -->
+    <button id="close-chat" title="Close Chat">&times;</button>
+    
+    <div id="avatar-container">
+      <div id="avatar"></div>
+      <h3 class="avatar-heading">Real Estate Assistant</h3>
+    </div>
+    <div id="chat-container">
+      <!-- You can optionally include an initial greeting -->
+      <!-- <div class="message agent">Hello! I'm your AI real estate assistant. How can I assist you today?</div> -->
+    </div>
+    <div id="input-container">
+      <input type="text" id="user-input" placeholder="Type your message here...">
+      <button id="send-btn"><i data-lucide="send"></i></button>
+    <!-- </div> -->
+    <!-- <div id="controls"> -->
+      <button class="control-btn" id="mic-btn" title="Speak"><i data-lucide="mic"></i></button>
+      <button class="control-btn" id="speaker-btn" title="Toggle Audio"><i data-lucide="volume-2"></i></button>
+    </div>
+  </div>
+  
+  <script>
+    // Initialize icons from Lucide
+    function updateIcons() { lucide.createIcons(); }
+    updateIcons();
+
+    // Elements
+    const toggleBtn = document.getElementById('chatbot-toggle');
+    const chatWidget = document.getElementById('chat-widget-dialog');
+    const closeBtn = document.getElementById('close-chat');
+
+    // Toggle chat widget visibility on open and close
+    toggleBtn.addEventListener('click', () => {
+      chatWidget.style.display = 'block';
+      toggleBtn.style.display = 'none';
+    });
+
+    closeBtn.addEventListener('click', () => {
+      chatWidget.style.display = 'none';
+      toggleBtn.style.display = 'block';
+    });
+  </script>
+  
+  <script src="../static/scripts.js"></script>
 </body>
 </html>
