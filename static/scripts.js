@@ -151,8 +151,6 @@
 
 
 
-
-// Add event listener when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
     // Check if speech recognition is available
     if (!('SpeechRecognition' in window) && !('webkitSpeechRecognition' in window)) {
@@ -162,21 +160,238 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Initialize with a greeting
     addAgentMessage("Hello! 👋 I'm your personal real estate assistant. How can I help you find your perfect property today?");
+    
+    // Initialize icons
+    if (typeof lucide !== 'undefined') {
+        lucide.createIcons();
+    }
+    
+    // Show chat widget initially (for demo, you may want to change this to 'none' for production)
+    document.getElementById("chat-widget-dialog").style.display = 'none';
+    document.getElementById("chatbot-toggle").style.display = 'block';
+
+    // Chat toggle functionality
+    const toggleBtn = document.getElementById('chatbot-toggle');
+    const chatWidget = document.getElementById('chat-widget-dialog');
+    const closeBtn = document.getElementById('close-chat');
+          
+    toggleBtn.addEventListener('click', () => {
+        chatWidget.style.display = 'flex';
+        toggleBtn.style.display = 'none';
+    });
+          
+    closeBtn.addEventListener('click', () => {
+        chatWidget.style.display = 'none';
+        toggleBtn.style.display = 'flex';
+    });
+
+    // Load voices when the page loads
+    ensureVoicesLoaded(voices => {
+        console.log("Available voices:", voices.map(v => v.name));
+    });
 });
 
+// Global variables for speech functionality
+let isListening = false;
+let isSpeaking = false;
+let recognition = null;
+const synth = window.speechSynthesis;
+let femaleVoice = null;
+
 // Voice recognition functionality
-document.getElementById("mic-btn").addEventListener("click", () => {
-    const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
-    recognition.lang = "en-US";
+document.getElementById("mic-btn").addEventListener("click", toggleSpeechRecognition);
+
+function toggleSpeechRecognition() {
+    if (isListening) {
+        stopListening();
+    } else {
+        startListening();
+    }
+}
+
+function startListening() {
+    // Create recognition object if it doesn't exist
+    if (!recognition) {
+        recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+        recognition.lang = "en-US";
+        recognition.continuous = false;
+        recognition.interimResults = false;
+        
+        recognition.onresult = (event) => {
+            const transcript = event.results[0][0].transcript;
+            document.getElementById("user-input").value = transcript;
+            // Small delay to show the transcribed text before sending
+            setTimeout(() => {
+                sendMessage();
+            }, 500);
+        };
+        
+        recognition.onerror = (event) => {
+            console.error(`Speech recognition error: ${event.error}`);
+            stopListening();
+        };
+        
+        recognition.onend = () => {
+            if (isListening) {
+                stopListening();
+            }
+        };
+    }
+    
+    isListening = true;
     recognition.start();
-    recognition.onresult = (event) => {
-        const transcript = event.results[0][0].transcript;
-        addUserMessage(transcript);
+    
+    // Update mic button appearance
+    const micBtn = document.getElementById("mic-btn");
+    micBtn.innerHTML = '<i data-lucide="mic-off"></i>';
+    micBtn.classList.add("active");
+    updateIcons();
+}
+
+function stopListening() {
+    if (recognition) {
+        recognition.stop();
+    }
+    isListening = false;
+    
+    // Update mic button appearance
+    const micBtn = document.getElementById("mic-btn");
+    micBtn.innerHTML = '<i data-lucide="mic"></i>';
+    micBtn.classList.remove("active");
+    updateIcons();
+}
+
+// Text-to-speech functionality
+document.getElementById("speaker-btn").addEventListener("click", toggleSpeaking);
+
+function toggleSpeaking() {
+    isSpeaking = !isSpeaking;
+    
+    // Update speaker button appearance
+    const speakerBtn = document.getElementById("speaker-btn");
+    
+    if (isSpeaking) {
+        speakerBtn.innerHTML = '<i data-lucide="volume-2"></i>';
+        speakerBtn.classList.add("active");
+        
+        // Speak the last agent message if available
+        const messages = document.querySelectorAll('.message.agent');
+        if (messages.length > 0) {
+            const lastMessage = messages[messages.length - 1];
+            speakResponse(lastMessage.innerText);
+        }
+    } else {
+        speakerBtn.innerHTML = '<i data-lucide="volume-x"></i>';
+        speakerBtn.classList.remove("active");
+        synth.cancel(); // Stop any ongoing speech
+    }
+    
+    updateIcons();
+}
+
+function speakResponse(text) {
+    if (!isSpeaking) return;
+    
+    // Cancel any ongoing speech
+    synth.cancel();
+    
+    // Clean up the text for speaking
+    let cleanText = text.replace(/\*\*(.*?)\*\*/g, '$1'); // Remove bold markers
+    cleanText = cleanText.replace(/\*(.*?)\*/g, '$1');    // Remove italic markers
+    cleanText = cleanText.replace(/<br>/g, ' ');          // Replace HTML breaks with spaces
+    
+    // Get only the first part of the message before detailed listings
+    if (cleanText.includes("Property 1:")) {
+        cleanText = cleanText.split("Property 1:")[0] + "I found some properties that match your criteria.";
+    }
+    
+    // Create utterance
+    const utterance = new SpeechSynthesisUtterance(cleanText);
+    
+    // Set female voice if available
+    if (femaleVoice) {
+        utterance.voice = femaleVoice;
+    } else {
+        // Try to find a female voice if not already set
+        ensureVoicesLoaded(voices => {
+            // Find a female voice
+            femaleVoice = findFemaleVoice(voices);
+            if (femaleVoice) {
+                utterance.voice = femaleVoice;
+            }
+        });
+    }
+    
+    // Set voice properties
+    utterance.rate = 1.0;
+    utterance.pitch = 1.1; // Slightly higher pitch for female voice
+    utterance.volume = 1.0;
+    
+    // Add event listeners for speech feedback
+    utterance.onstart = () => {
+        const speakerBtn = document.getElementById("speaker-btn");
+        speakerBtn.classList.add("speaking");
     };
-    recognition.onerror = (event) => {
-        alert(`Error: ${event.error}`);
+    
+    utterance.onend = () => {
+        const speakerBtn = document.getElementById("speaker-btn");
+        speakerBtn.classList.remove("speaking");
     };
-});
+    
+    // Speak the text
+    synth.speak(utterance);
+}
+
+// Find a female voice from available voices
+function findFemaleVoice(voices) {
+    // First try to find an explicitly female voice
+    let voice = voices.find(voice => 
+        voice.name.toLowerCase().includes('female') || 
+        voice.name.toLowerCase().includes('samantha') ||
+        voice.name.toLowerCase().includes('victoria') ||
+        voice.name.toLowerCase().includes('karen') ||
+        voice.name.toLowerCase().includes('tessa') ||
+        voice.name.toLowerCase().includes('susan') ||
+        voice.name.toLowerCase().includes('zira')
+    );
+    
+    // If no explicitly female voice is found, try to find a voice that's likely female
+    if (!voice) {
+        voice = voices.find(voice => 
+            !voice.name.toLowerCase().includes('male') && 
+            !voice.name.toLowerCase().includes('daniel') &&
+            !voice.name.toLowerCase().includes('david') &&
+            !voice.name.toLowerCase().includes('alex') &&
+            !voice.name.toLowerCase().includes('google') &&
+            voice.name !== 'Microsoft Edge TTS (Default)'
+        );
+    }
+    
+    // If still no voice found, just use the first available voice
+    if (!voice && voices.length > 0) {
+        voice = voices[0];
+    }
+    
+    return voice;
+}
+
+// Ensure voices are loaded
+function ensureVoicesLoaded(callback) {
+    let voices = window.speechSynthesis.getVoices();
+    if (voices.length !== 0) {
+        // Set the female voice globally
+        femaleVoice = findFemaleVoice(voices);
+        callback(voices);
+        return;
+    }
+
+    window.speechSynthesis.onvoiceschanged = () => {
+        voices = window.speechSynthesis.getVoices();
+        // Set the female voice globally
+        femaleVoice = findFemaleVoice(voices);
+        callback(voices);
+    };
+}
 
 // Text input functionality
 document.getElementById("send-btn").addEventListener("click", sendMessage);
@@ -193,6 +408,100 @@ function sendMessage() {
     if (message) {
         addUserMessage(message);
         userInput.value = "";
+        userInput.focus();
+        
+        // Stop listening if it's active
+        if (isListening) {
+            stopListening();
+        }
+        
+        // Call the backend API instead of using hardcoded responses
+        callChatApi(message);
+    }
+}
+
+// Function to call the actual backend API
+async function callChatApi(query) {
+    // Add a loading message
+    const chatContainer = document.getElementById("chat-container");
+    const loadingMessage = document.createElement("div");
+    loadingMessage.classList.add("message", "agent", "loading");
+    loadingMessage.textContent = "Processing your request";
+    loadingMessage.id = "loading-message";
+    chatContainer.appendChild(loadingMessage);
+    chatContainer.scrollTop = chatContainer.scrollHeight;
+    
+    try {
+        // Call the Flask backend
+        const response = await fetch('/api/chat', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ message: query })
+        });
+        
+        // Remove the loading message
+        const loadingEl = document.getElementById("loading-message");
+        if (loadingEl) loadingEl.remove();
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        
+        // Show acknowledgment if provided
+        if (data.acknowledgment) {
+            const ackMessage = document.createElement("div");
+            ackMessage.classList.add("message", "agent", "acknowledgment");
+            ackMessage.textContent = data.acknowledgment;
+            chatContainer.appendChild(ackMessage);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+            
+            // Remove acknowledgment after the full response arrives
+            setTimeout(() => {
+                ackMessage.remove();
+            }, 1500);
+        }
+        
+        // Add the full response to the chat
+        addAgentMessage(data.message);
+        
+        // Speak the response if audio is enabled
+        if (isSpeaking) {
+            speakResponse(data.message);
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        
+        // Remove the loading message
+        const loadingEl = document.getElementById("loading-message");
+        if (loadingEl) loadingEl.remove();
+        
+        // Add error message
+        addAgentMessage("Sorry, I encountered an error processing your request. Please try again.");
+    }
+}
+
+// Fallback function if the API fails
+function generateFallbackResponse(query) {
+    query = query.toLowerCase();
+    
+    if (query.includes('hello') || query.includes('hi') || query.includes('hey')) {
+        return "Hi there! 👋 How can I help you with your property search today?";
+    }
+    else if (query.includes('buy') || query.includes('looking for') || query.includes('search')) {
+        return "I'd be happy to help you find a property! Could you tell me more about what you're looking for?";
+    }
+    else if (query.includes('sell')) {
+        return "Interested in selling your property? Great! I can help you with that.";
+    }
+    else if (query.includes('price') || query.includes('cost') || query.includes('budget')) {
+        return "Property prices vary depending on location, size, and amenities. I'll search for properties in your budget.";
+    }
+    else {
+        return "I'll help you find the perfect property. What specific features are you looking for?";
     }
 }
 
@@ -203,54 +512,6 @@ function addUserMessage(text) {
     userMessage.textContent = text;
     chatContainer.appendChild(userMessage);
     chatContainer.scrollTop = chatContainer.scrollHeight;
-    
-    // Add a loading message
-    const loadingMessage = document.createElement("div");
-    loadingMessage.classList.add("message", "agent", "loading");
-    loadingMessage.textContent = "Processing your request...";
-    loadingMessage.id = "loading-message";
-    chatContainer.appendChild(loadingMessage);
-    chatContainer.scrollTop = chatContainer.scrollHeight;
-    
-    // Make API call to the backend
-    fetch('/api/query', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ query: text })
-    })
-    .then(response => {
-        if (!response.ok) {
-            throw new Error(`Network response was not ok: ${response.status}`);
-        }
-        return response.json();
-    })
-    .then(data => {
-        // Remove the loading message
-        document.getElementById("loading-message").remove();
-        
-        if (data.status === "success") {
-            // Add the actual response
-            addAgentMessage(data.response);
-            
-            // Speak the response if audio is enabled
-            speakResponse(data.response);
-        } else {
-            // Handle error in the response
-            addAgentMessage("Sorry, there was an error: " + (data.message || "Unknown error"));
-        }
-    })
-    .catch(error => {
-        // Remove the loading message
-        if (document.getElementById("loading-message")) {
-            document.getElementById("loading-message").remove();
-        }
-        
-        // Show error message
-        addAgentMessage("Sorry, there was an error connecting to the server. Please try again.");
-        console.error('Error:', error);
-    });
 }
 
 function addAgentMessage(text) {
@@ -287,34 +548,9 @@ function formatResponseText(text) {
     return formattedText;
 }
 
-// Audio output functionality
-let isSpeaking = false;
-const synth = window.speechSynthesis;
-
-document.getElementById("speaker-btn").addEventListener("click", () => {
-    isSpeaking = !isSpeaking;
-    const speakerBtn = document.getElementById("speaker-btn");
-    speakerBtn.textContent = isSpeaking ? "🔇" : "🔊";
-    
-    if (!isSpeaking) {
-        synth.cancel();
+// Ensure Lucide icons are updated
+function updateIcons() {
+    if (typeof lucide !== 'undefined' && lucide.createIcons) {
+        lucide.createIcons();
     }
-});
-
-function speakResponse(text) {
-    if (!isSpeaking) return;
-    
-    // Clean up the text for speaking (remove markdown and detailed listings)
-    let cleanText = text.replace(/\*\*(.*?)\*\*/g, '$1'); // Remove bold markers
-    cleanText = cleanText.replace(/\*(.*?)\*/g, '$1');    // Remove italic markers
-    
-    // Get only the first part of the message before property listings
-    if (cleanText.includes("Property 1:")) {
-        cleanText = cleanText.split("Property 1:")[0];
-    }
-    
-    const utterance = new SpeechSynthesisUtterance(cleanText);
-    utterance.rate = 1.0;
-    utterance.pitch = 1.0;
-    synth.speak(utterance);
 }

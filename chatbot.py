@@ -281,7 +281,7 @@ class RealEstateAgent:
             return self._fallback_query_parser(prompt)
     
     def _fallback_query_parser(self, query):
-        """Fallback query parser for when the API call fails."""
+        """Improved fallback query parser for when the API call fails."""
         query = query.lower()
         result = {
             "location": None,
@@ -294,20 +294,25 @@ class RealEstateAgent:
             "purpose": None,
             "furnishing": None
         }
-        
+    
         # Basic location extraction
         locations = ["dubai", "downtown", "waterfront", "marina", "palm jumeirah", "arabian ranches"]
         for loc in locations:
             if loc in query:
                 result["location"] = loc
                 break
-        
-        # Basic bedroom extraction
+    
+        # Improved bedroom extraction
         bedroom_match = re.search(r'(\d+)[- ]?bed', query)
         if bedroom_match:
             result["bedrooms"] = int(bedroom_match.group(1))
-        
-        # Basic property type extraction
+        else:
+            # Alternative bedroom extraction pattern
+            bedroom_alt_match = re.search(r'(\d+) bedroom', query)
+            if bedroom_alt_match:
+                result["bedrooms"] = int(bedroom_alt_match.group(1))
+    
+        # Improved property type extraction
         property_types = {
             "apartment": ["apartment", "flat", "condo"],
             "villa": ["villa", "mansion"],
@@ -315,41 +320,78 @@ class RealEstateAgent:
             "house": ["house", "home"],
             "studio": ["studio"]
         }
-        
+    
         for prop_type, keywords in property_types.items():
             if any(keyword in query for keyword in keywords):
                 result["property_type"] = prop_type
                 break
+    
+        # Enhanced price extraction for both min and max
+        # Check for price range between X and Y
+        price_range_match = re.search(r'between (\d+)[^\d]+(\d+)', query)
+        if price_range_match:
+            result["min_price"] = float(price_range_match.group(1))
+            result["max_price"] = float(price_range_match.group(2))
+        else:
+            # Check for max price (less than, under, below)
+            max_price_match = re.search(r'(less than|under|below) (\d+)', query)
+            if max_price_match:
+                result["max_price"] = float(max_price_match.group(2))
         
-        # Basic price extraction
-        price_match = re.search(r'(less than|under|below) (\d+)', query)
-        if price_match:
-            result["max_price"] = float(price_match.group(2))
+            # Check for min price (more than, over, above)
+            min_price_match = re.search(r'(more than|over|above|at least) (\d+)', query)
+            if min_price_match:
+                result["min_price"] = float(min_price_match.group(2))
         
+            # Look for price ranges with "million" or "M"
+            million_min_match = re.search(r'(more than|over|above|at least) (\d+(?:\.\d+)?)\s*(million|m)', query, re.IGNORECASE)
+            if million_min_match:
+                result["min_price"] = float(million_min_match.group(2)) * 1000000
+            
+            million_max_match = re.search(r'(less than|under|below) (\d+(?:\.\d+)?)\s*(million|m)', query, re.IGNORECASE)
+            if million_max_match:
+                result["max_price"] = float(million_max_match.group(2)) * 1000000
+
+        # Fix for "X million AED to Y million AED" pattern
+        aed_range_match = re.search(r'(\d+(?:\.\d+)?)\s*(?:million)?\s*AED\s*(?:and|to|–|-)\s*(\d+(?:\.\d+)?)\s*(?:million)?\s*AED', query, re.IGNORECASE)
+        if aed_range_match:
+            min_val = float(aed_range_match.group(1))
+            max_val = float(aed_range_match.group(2))
+            # If using "million" explicitly or values are small, multiply by million
+            if 'million' in query or (min_val < 100 and max_val < 100):
+                result["min_price"] = min_val * 1000000
+                result["max_price"] = max_val * 1000000
+            else:
+                result["min_price"] = min_val
+                result["max_price"] = max_val
+    
         # Basic price qualifier
         if any(word in query for word in ["cheap", "affordable", "budget"]):
             result["price_qualifier"] = "cheap"
         elif any(word in query for word in ["luxury", "expensive", "high-end"]):
             result["price_qualifier"] = "luxury"
-        
-        # Purpose extraction (rent or sale)
-        if any(word in query for word in ["rent", "rental", "lease", "renting"]):
-            result["purpose"] = "Rent"
-        elif any(word in query for word in ["buy", "purchase", "sale", "buying"]):
+    
+        # Improved purpose extraction (rent or sale)
+        buy_keywords = ["buy", "purchase", "buying", "purchasing", "sale", "acquire", "own", "invest"]
+        rent_keywords = ["rent", "rental", "lease", "renting", "leasing"]
+    
+        if any(word in query for word in buy_keywords):
             result["purpose"] = "Sale"
-        
+        elif any(word in query for word in rent_keywords):
+            result["purpose"] = "Rent"
+    
         # Furnishing status
         if "furnished" in query:
             result["furnishing"] = "Furnished"
         elif "unfurnished" in query:
             result["furnishing"] = "Unfurnished"
-        
+    
         # Basic amenities
         amenities = ["pool", "gym", "balcony", "view", "parking", "furnished", "garden", "terrace"]
         for amenity in amenities:
             if amenity in query:
                 result["amenities"].append(amenity)
-        
+    
         logger.info(f"Fallback query parser result: {result}")
         return result
     
@@ -379,25 +421,25 @@ Provide null or empty values if not specified in the query.
         return prompt.strip()
     
     def _filter_properties(self, query_details):
-        """Filter properties based on query details."""
+        """Enhanced filter properties based on query details."""
         filtered_df = self.knowledge_base.copy()
         logger.info(f"Starting with {len(filtered_df)} properties before filtering")
-        
-        # Start with less restrictive filtering for small datasets
-        filters_applied = False
-        
-        # Purpose filtering (rent or sale)
+    
+        # Track filters for debugging
+        applied_filters = []
+    
+        # Purpose filtering (rent or sale) - CRITICAL FIX
         if query_details.get('purpose'):
             purpose = query_details['purpose']
             if 'Purpose' in filtered_df.columns:
                 temp_filtered = filtered_df[filtered_df['Purpose'] == purpose]
                 if not temp_filtered.empty:
                     filtered_df = temp_filtered
-                    filters_applied = True
+                    applied_filters.append(f"purpose={purpose}")
                     logger.info(f"After purpose filtering for '{purpose}': {len(filtered_df)} properties")
                 else:
                     logger.warning(f"Purpose filter for '{purpose}' would remove all properties, skipping this filter")
-        
+    
         # Furnishing filtering
         if query_details.get('furnishing'):
             furnishing = query_details['furnishing']
@@ -405,126 +447,108 @@ Provide null or empty values if not specified in the query.
                 temp_filtered = filtered_df[filtered_df['Furnishing'] == furnishing]
                 if not temp_filtered.empty:
                     filtered_df = temp_filtered
-                    filters_applied = True
+                    applied_filters.append(f"furnishing={furnishing}")
                     logger.info(f"After furnishing filtering for '{furnishing}': {len(filtered_df)} properties")
                 else:
                     logger.warning(f"Furnishing filter for '{furnishing}' would remove all properties, skipping this filter")
-        
-        # Price qualifier handling
-        if query_details.get('price_qualifier') in ['cheap', 'affordable', 'budget']:
-            # Set a reasonable max price if none was explicitly provided
-            if query_details.get('max_price') is None and 'Price' in filtered_df.columns:
-                # Calculate the 30th percentile of prices for cheap properties
-                if len(filtered_df) >= 10:  # Only apply percentile for larger datasets
-                    price_threshold = filtered_df['Price'].quantile(0.3)
-                else:
-                    # Use median for small datasets
-                    price_threshold = filtered_df['Price'].median() * 0.8
-                
-                logger.info(f"Setting max price threshold to {price_threshold} based on 'cheap' qualifier")
-                filtered_df = filtered_df[filtered_df['Price'] <= price_threshold]
-                filters_applied = True
-                logger.info(f"After price qualifier filtering: {len(filtered_df)} properties")
-        
-        elif query_details.get('price_qualifier') in ['luxury', 'expensive', 'high-end']:
-            # For luxury properties, look at the top 30%
-            if query_details.get('min_price') is None and 'Price' in filtered_df.columns:
-                if len(filtered_df) >= 10:
-                    price_threshold = filtered_df['Price'].quantile(0.7)
-                else:
-                    price_threshold = filtered_df['Price'].median() * 1.2
-                
-                logger.info(f"Setting min price threshold to {price_threshold} based on 'luxury' qualifier")
-                filtered_df = filtered_df[filtered_df['Price'] >= price_threshold]
-                filters_applied = True
-                logger.info(f"After luxury price filtering: {len(filtered_df)} properties")
-        
+    
         # Location filtering
         if query_details.get('location'):
             loc = query_details['location'].lower()
             location_mask = pd.Series(False, index=filtered_df.index)
-            
-            for col in ['Processed_Location', 'Processed_City', 'Processed_Country']:
+        
+            for col in ['Processed_Location', 'Processed_City', 'Processed_Country', 'Location']:
                 if col in filtered_df.columns:
-                    location_mask = location_mask | filtered_df[col].str.contains(loc, na=False, regex=True, case=False)
-            
-            # If we have a 'downtown' query, also look for 'center' and 'central'
-            if loc.lower() == 'downtown':
-                for col in ['Processed_Location', 'Processed_City', 'Processed_Country']:
-                    if col in filtered_df.columns:
-                        location_mask = location_mask | filtered_df[col].str.contains('center', na=False, regex=True, case=False)
-                        location_mask = location_mask | filtered_df[col].str.contains('central', na=False, regex=True, case=False)
-            
+                    location_mask = location_mask | filtered_df[col].str.lower().str.contains(loc, na=False, regex=True, case=False)
+        
             temp_filtered = filtered_df[location_mask]
-            # Only apply filter if it doesn't eliminate all properties
             if not temp_filtered.empty:
                 filtered_df = temp_filtered
-                filters_applied = True
+                applied_filters.append(f"location={loc}")
                 logger.info(f"After location filtering for '{loc}': {len(filtered_df)} properties")
             else:
                 logger.warning(f"Location filter for '{loc}' would remove all properties, skipping this filter")
-        
-        # Bedrooms filtering - with threshold
+    
+        # Bedrooms filtering - CRITICAL FIX
         if query_details.get('bedrooms') is not None:
+            bedrooms = query_details['bedrooms']
             if 'Bedrooms' in filtered_df.columns:
-                # First try exact match
-                exact_match = filtered_df[filtered_df['Bedrooms'] == query_details['bedrooms']]
-                if not exact_match.empty:
+                # Ensure the column is numeric
+                filtered_df['Bedrooms_Numeric'] = pd.to_numeric(filtered_df['Bedrooms'], errors='coerce')
+            
+                # Try exact match
+                exact_match = filtered_df[filtered_df['Bedrooms_Numeric'] == bedrooms]
+                if len(exact_match) > 0:
                     filtered_df = exact_match
-                    filters_applied = True
+                    applied_filters.append(f"bedrooms={bedrooms}")
                     logger.info(f"After exact bedroom filtering: {len(filtered_df)} properties")
                 else:
                     # If no exact match, try +/- 1 bedroom
                     logger.info("No exact bedroom match, trying with +/- 1 bedroom")
                     bedroom_mask = (
-                        (filtered_df['Bedrooms'] >= query_details['bedrooms'] - 1) & 
-                        (filtered_df['Bedrooms'] <= query_details['bedrooms'] + 1)
+                        (filtered_df['Bedrooms_Numeric'] >= bedrooms - 1) & 
+                        (filtered_df['Bedrooms_Numeric'] <= bedrooms + 1)
                     )
                     bedroom_filtered = filtered_df[bedroom_mask]
                     if not bedroom_filtered.empty:
                         filtered_df = bedroom_filtered
-                        filters_applied = True
+                        applied_filters.append(f"bedrooms≈{bedrooms}")
                         logger.info(f"After flexible bedroom filtering: {len(filtered_df)} properties")
                     else:
                         logger.warning("Bedroom filter would remove all properties, skipping this filter")
-        
-        # Price filtering (for explicit prices)
+    
+        # Price filtering - CRITICAL FIX for min and max ranges
+        # Handle max_price
         if query_details.get('max_price') is not None:
             max_price = float(query_details['max_price'])
             if 'Price' in filtered_df.columns:
+                # Ensure Price column is numeric
+                filtered_df['Price'] = pd.to_numeric(filtered_df['Price'], errors='coerce')
+            
                 temp_filtered = filtered_df[filtered_df['Price'] <= max_price]
-                # Only apply filter if it doesn't eliminate all properties
                 if not temp_filtered.empty:
                     filtered_df = temp_filtered
-                    filters_applied = True
+                    applied_filters.append(f"price<={max_price}")
                     logger.info(f"After max price filtering: {len(filtered_df)} properties")
                 else:
-                    # If the filter would remove all properties, try with a higher threshold
+                    # If filter is too restrictive, try with a slightly higher threshold
                     logger.warning(f"Max price filter would remove all properties, trying with 20% higher threshold")
                     temp_filtered = filtered_df[filtered_df['Price'] <= max_price * 1.2]
                     if not temp_filtered.empty:
                         filtered_df = temp_filtered
-                        filters_applied = True
+                        applied_filters.append(f"price<={max_price*1.2}")
                         logger.info(f"After adjusted max price filtering: {len(filtered_df)} properties")
                     else:
-                        logger.warning("Price filter would remove all properties, skipping this filter")
-        
+                        logger.warning("Max price filter would remove all properties, skipping this filter")
+    
+        # Handle min_price - CRITICAL FIX
         if query_details.get('min_price') is not None:
             min_price = float(query_details['min_price'])
             if 'Price' in filtered_df.columns:
+                # Ensure Price column is numeric
+                filtered_df['Price'] = pd.to_numeric(filtered_df['Price'], errors='coerce')
+            
                 temp_filtered = filtered_df[filtered_df['Price'] >= min_price]
                 if not temp_filtered.empty:
                     filtered_df = temp_filtered
-                    filters_applied = True
+                    applied_filters.append(f"price>={min_price}")
                     logger.info(f"After min price filtering: {len(filtered_df)} properties")
                 else:
-                    logger.warning("Min price filter would remove all properties, skipping this filter")
-        
+                    # If filter is too restrictive, try with a slightly lower threshold
+                    logger.warning(f"Min price filter would remove all properties, trying with 20% lower threshold")
+                    temp_filtered = filtered_df[filtered_df['Price'] >= min_price * 0.8]
+                    if not temp_filtered.empty:
+                        filtered_df = temp_filtered
+                        applied_filters.append(f"price>={min_price*0.8}")
+                        logger.info(f"After adjusted min price filtering: {len(filtered_df)} properties")
+                    else:
+                        logger.warning("Min price filter would remove all properties, skipping this filter")
+    
         # Property type filtering
         if query_details.get('property_type'):
             req_type = query_details['property_type'].lower()
-            
-            # Define type variants
+        
+            # Define type variants for flexible matching
             type_variants = {
                 'house': ['house', 'villa', 'townhouse', 'home', 'bungalow', 'mansion'],
                 'apartment': ['apartment', 'flat', 'unit', 'condo', 'condominium', 'penthouse'],
@@ -532,53 +556,39 @@ Provide null or empty values if not specified in the query.
                 'studio': ['studio', 'studio apartment'],
                 'townhouse': ['townhouse', 'town house', 'row house']
             }
-            
+        
             type_list = type_variants.get(req_type, [req_type])
-            
+        
             # Flexible type matching
             type_mask = pd.Series(False, index=filtered_df.index)
             for property_type in type_list:
-                if 'Processed_Type' in filtered_df.columns:
-                    type_mask = type_mask | filtered_df['Processed_Type'].str.contains(property_type, na=False, regex=True, case=False)
-                if 'Type' in filtered_df.columns:
-                    type_mask = type_mask | filtered_df['Type'].str.lower().str.contains(property_type, na=False, regex=True)
-            
-            # Try to match in description too
+                for col in ['Type', 'Processed_Type']:
+                    if col in filtered_df.columns:
+                        type_mask = type_mask | filtered_df[col].astype(str).str.lower().str.contains(property_type, na=False, regex=True)
+        
+            # Try to match in description too for additional flexibility
             if 'Description' in filtered_df.columns:
                 for property_type in type_list:
-                    type_mask = type_mask | filtered_df['Description'].str.lower().str.contains(property_type, na=False, regex=True)
-            
+                    type_mask = type_mask | filtered_df['Description'].astype(str).str.lower().str.contains(property_type, na=False, regex=True)
+        
             temp_filtered = filtered_df[type_mask]
             if not temp_filtered.empty:
                 filtered_df = temp_filtered
-                filters_applied = True
+                applied_filters.append(f"type={req_type}")
                 logger.info(f"After property type filtering: {len(filtered_df)} properties")
             else:
-                logger.warning(f"Property type filter for '{req_type}' would remove all properties, skipping this filter")
-        
-        # Special handling for "waterfront" or "ocean view"
-        if hasattr(self, 'current_query') and ("waterfront" in self.current_query.lower() or "ocean view" in self.current_query.lower()):
-            water_keywords = ["waterfront", "ocean", "sea", "beach", "marine", "water view", "waterside"]
-            water_mask = pd.Series(False, index=filtered_df.index)
-            
-            for col in ['Description', 'Processed_Description', 'Title', 'Processed_Title']:
-                if col in filtered_df.columns:
-                    for keyword in water_keywords:
-                        water_mask = water_mask | filtered_df[col].str.contains(keyword, na=False, regex=True, case=False)
-            
-            temp_filtered = filtered_df[water_mask]
-            if not temp_filtered.empty:
-                filtered_df = temp_filtered
-                filters_applied = True
-                logger.info(f"After waterfront/ocean view filtering: {len(filtered_df)} properties")
-            else:
-                logger.warning("Waterfront filter would remove all properties, skipping this filter")
-        
-        # Fall back to original data if no filters could be applied or if we filtered too much
-        if filtered_df.empty or not filters_applied:
-            logger.warning("All filters were too restrictive or no filters were applied. Using original dataset.")
-            return self.knowledge_base
-        
+                logger.warning(f"Property type filter would remove all properties, skipping this filter")
+    
+        # Log all applied filters for better debugging
+        logger.info(f"Applied filters: {', '.join(applied_filters)}")
+    
+        # Check if we have any results after filtering
+        if filtered_df.empty:
+            logger.warning("All filters were too restrictive. Using original dataset with relaxed filters.")
+            # Implement a more relaxed filtering strategy here if needed
+            # For now, return at least a subset of the original data
+            return self.knowledge_base.head(5)
+    
         return filtered_df
     
     def _semantic_search(self, filtered_df, user_query, top_k=5):
@@ -684,19 +694,26 @@ Provide null or empty values if not specified in the query.
         return insights
 
     def _format_response_with_typing_effect(self, properties, user_query, query_details):
-        """Format response for a more conversational, typing-like experience."""
+        """Enhanced response formatting for a more conversational, typing-like experience."""
         if not properties.empty:
             insights = self.get_property_insights(properties)
         
-            # Create intro message for the response
+            # Create intro message with clear criteria emphasis
             purpose_str = f" for {query_details.get('purpose', 'purchase or rent')}" if query_details.get('purpose') else ""
             location_str = f" in {query_details.get('location')}" if query_details.get('location') else ""
             bedrooms_str = f" with {query_details.get('bedrooms')} bedrooms" if query_details.get('bedrooms') is not None else ""
+        
+            # Handle price range more clearly
             price_str = ""
-            if query_details.get('max_price'):
+            if query_details.get('min_price') and query_details.get('max_price'):
+                price_str = f" between AED {query_details.get('min_price'):,.2f} and AED {query_details.get('max_price'):,.2f}"
+            elif query_details.get('min_price'):
+                price_str = f" above AED {query_details.get('min_price'):,.2f}"
+            elif query_details.get('max_price'):
                 price_str = f" under AED {query_details.get('max_price'):,.2f}"
         
-            intro = f"📋 I've found {len(insights)} properties{purpose_str}{location_str}{bedrooms_str}{price_str} that might interest you.\n\nLet me share the details one by one:"
+            # Create a clearer, more specific intro
+            intro = f"📋 I've found {len(insights)} properties{purpose_str}{location_str}{bedrooms_str}{price_str} that match your criteria.\n\nHere are the details:"
         
             # Format each property in a more conversational way
             property_responses = []
@@ -728,7 +745,7 @@ Provide null or empty values if not specified in the query.
             full_response = intro + "".join(property_responses) + more_results + follow_up
             return full_response
         else:
-            return "I couldn't find any properties matching your criteria. Would you like to try a different search?"
+            return "I couldn't find any properties exactly matching your criteria. Would you like to try with a broader price range or different number of bedrooms?"
 
     def _get_dataset_overview(self):
         """Generate an overview of the available data in the knowledge base."""
@@ -918,3 +935,14 @@ Provide null or empty values if not specified in the query.
 # Call the function outside the class
     if __name__ == "__main__":
         run_cli_interface()
+
+
+
+
+        
+
+
+
+
+
+# CURRENT ONE
