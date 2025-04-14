@@ -10,7 +10,7 @@ from chatbot import RealEstateAgent
 load_dotenv()
 
 # Configuration
-GEMINI_API_KEY = os.getenv('GEMINI_API_KEY', 'your-api-key-here')
+GEMINI_API_KEY = os.getenv('GEMINI_API_KEY', 'AIzaSyCHTlehGQFmbl9Cq9HAPKEGiON7CC8HILY')
 CSV_PATH = os.getenv('CSV_PATH', 'realestatedata.csv')
 
 # Set up logging
