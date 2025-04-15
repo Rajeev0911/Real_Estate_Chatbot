@@ -5,10 +5,6 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# You can choose to keep the simple keyword checks as methods on the agent;
-# here we assume the agent instance already has _is_greeting, _is_basic_question, and _is_data_question methods.
-# For this example, we’ll use them from the passed agent instance.
-
 def process_user_message_with_typing(agent, message: str) -> dict:
     """Process a user's message and update conversation history. Returns the query details as extracted via Gemini."""
     agent.current_query = message
