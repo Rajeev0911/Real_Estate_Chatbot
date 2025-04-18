@@ -296,9 +296,10 @@ function speakResponse(text) {
     synth.cancel();
     
     // Clean up the text for speaking
-    let cleanText = text.replace(/\*\*(.*?)\*\*/g, '$1'); // Remove bold markers
-    cleanText = cleanText.replace(/\*(.*?)\*/g, '$1');    // Remove italic markers
-    cleanText = cleanText.replace(/<br>/g, ' ');          // Replace HTML breaks with spaces
+    let cleanText = text.replace(/\*\*(.*?)\*\*/g, '$1') // Remove bold markers
+                       .replace(/\*(.*?)\*/g, '$1')    // Remove italic markers
+                       .replace(/<br>/g, ' ')          // Replace HTML breaks with spaces
+                       .replace(/🏠/g, 'Property');    // Replace property emoji
     
     // Get only the first part of the message before detailed listings
     if (cleanText.includes("Property 1:")) {
@@ -307,20 +308,6 @@ function speakResponse(text) {
     
     // Create utterance
     const utterance = new SpeechSynthesisUtterance(cleanText);
-    
-    // Set female voice if available
-    if (femaleVoice) {
-        utterance.voice = femaleVoice;
-    } else {
-        // Try to find a female voice if not already set
-        ensureVoicesLoaded(voices => {
-            // Find a female voice
-            femaleVoice = findFemaleVoice(voices);
-            if (femaleVoice) {
-                utterance.voice = femaleVoice;
-            }
-        });
-    }
     
     // Set voice properties
     utterance.rate = 1.0;
@@ -342,57 +329,6 @@ function speakResponse(text) {
     synth.speak(utterance);
 }
 
-// Find a female voice from available voices
-function findFemaleVoice(voices) {
-    // First try to find an explicitly female voice
-    let voice = voices.find(voice => 
-        voice.name.toLowerCase().includes('female') || 
-        voice.name.toLowerCase().includes('samantha') ||
-        voice.name.toLowerCase().includes('victoria') ||
-        voice.name.toLowerCase().includes('karen') ||
-        voice.name.toLowerCase().includes('tessa') ||
-        voice.name.toLowerCase().includes('susan') ||
-        voice.name.toLowerCase().includes('zira')
-    );
-    
-    // If no explicitly female voice is found, try to find a voice that's likely female
-    if (!voice) {
-        voice = voices.find(voice => 
-            !voice.name.toLowerCase().includes('male') && 
-            !voice.name.toLowerCase().includes('daniel') &&
-            !voice.name.toLowerCase().includes('david') &&
-            !voice.name.toLowerCase().includes('alex') &&
-            !voice.name.toLowerCase().includes('google') &&
-            voice.name !== 'Microsoft Edge TTS (Default)'
-        );
-    }
-    
-    // If still no voice found, just use the first available voice
-    if (!voice && voices.length > 0) {
-        voice = voices[0];
-    }
-    
-    return voice;
-}
-
-// Ensure voices are loaded
-function ensureVoicesLoaded(callback) {
-    let voices = window.speechSynthesis.getVoices();
-    if (voices.length !== 0) {
-        // Set the female voice globally
-        femaleVoice = findFemaleVoice(voices);
-        callback(voices);
-        return;
-    }
-
-    window.speechSynthesis.onvoiceschanged = () => {
-        voices = window.speechSynthesis.getVoices();
-        // Set the female voice globally
-        femaleVoice = findFemaleVoice(voices);
-        callback(voices);
-    };
-}
-
 // Text input functionality
 document.getElementById("send-btn").addEventListener("click", sendMessage);
 document.getElementById("user-input").addEventListener("keypress", (e) => {
@@ -412,7 +348,7 @@ function sendMessage() {
         
         // Stop listening if it's active
         if (isListening) {
-            stopListening();
+            recognition.stop();
         }
         
         // Call the backend API instead of using hardcoded responses

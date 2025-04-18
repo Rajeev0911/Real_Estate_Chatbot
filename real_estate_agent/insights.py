@@ -63,57 +63,58 @@ def get_property_insights(properties: pd.DataFrame) -> list:
             logger.error(f"Error processing property: {e}")
     return insights
 
-def format_response_with_typing_effect(properties: pd.DataFrame, user_query: str, query_details: dict) -> str:
-    """Format a conversational response string with property insights.
+def format_response_with_typing_effect(properties, user_query, query_details):
+    """Format response text with a more natural, thinking-while-typing style."""
+    response_parts = []
     
-    Uses a brief introduction, then details for up to 3 properties, and a follow-up question.
-    """
+    # Start with an analysis of what was found
     if properties.empty:
-        return ("I couldn't find any properties exactly matching your criteria. "
-                "Would you like to try a broader search?")
+        return "I couldn't find any properties matching your criteria. Could you please try with different preferences?"
     
-    insights = get_property_insights(properties)
+    # Add introduction based on number of properties found
+    num_properties = len(properties)
+    if num_properties == 1:
+        response_parts.append("I found 1 property that matches your criteria.")
+    else:
+        response_parts.append(f"I found {num_properties} properties that match your criteria.")
     
-    purpose_str = f" for {query_details.get('purpose', 'purchase or rent')}" if query_details.get('purpose') else ""
-    location_str = f" in {query_details.get('location')}" if query_details.get('location') else ""
-    bedrooms_str = f" with {query_details.get('bedrooms')} bedrooms" if query_details.get('bedrooms') is not None else ""
+    # Add search criteria summary
+    criteria_parts = []
+    if query_details.get('location'):
+        criteria_parts.append(f"in {query_details['location']}")
+    if query_details.get('property_type'):
+        criteria_parts.append(f"of type {query_details['property_type']}")
+    if query_details.get('bedrooms'):
+        criteria_parts.append(f"with {query_details['bedrooms']} bedrooms")
+    if query_details.get('max_price'):
+        criteria_parts.append(f"under {query_details['max_price']:,}")
     
-    # Handle price range clarity
-    price_str = ""
-    if query_details.get('min_price') and query_details.get('max_price'):
-        price_str = f" between AED {query_details.get('min_price'):,.2f} and AED {query_details.get('max_price'):,.2f}"
-    elif query_details.get('min_price'):
-        price_str = f" above AED {query_details.get('min_price'):,.2f}"
-    elif query_details.get('max_price'):
-        price_str = f" under AED {query_details.get('max_price'):,.2f}"
+    if criteria_parts:
+        response_parts.append("You're looking for properties " + ", ".join(criteria_parts) + ".")
     
-    intro = (f"📋 I've found {len(insights)} properties{purpose_str}{location_str}{bedrooms_str}{price_str} "
-             "that match your criteria.\n\nHere are the details:")
+    # Add property details one by one
+    response_parts.append("\nHere are the details:")
     
-    property_responses = []
-    for i, insight in enumerate(insights[:3]):  # Limit to three properties for brevity
-        response = f"\n\n🏡 **Property {i+1}: {insight['title']}**\n"
-        response += f"💰 **Price**: {insight['price']} ({insight['purpose']})\n"
-        response += f"🏢 **Type**: {insight['type']}\n"
-        response += f"🛏️ **Bedrooms**: {insight['bedrooms']}\n"
-        response += f"📐 **Area**: {insight['area']}\n"
-        response += f"📍 **Location**: {insight['location']}\n"
-        response += f"🏠 **Furnishing**: {insight['furnishing']}\n"
-        desc = insight['description']
-        if isinstance(desc, str) and len(desc) > 150:
-            desc = desc[:147] + "..."
-        response += f"\n*{desc}*"
-        property_responses.append(response)
+    for idx, prop in properties.iterrows():
+        prop_details = []
+        prop_details.append(f"\n🏠 Property {idx + 1}:")
+        prop_details.append(f"- Type: {prop.get('Type', 'N/A')}")
+        prop_details.append(f"- Location: {prop.get('Location', 'N/A')}")
+        prop_details.append(f"- Price: {prop.get('Price', 'N/A'):,}")
+        if 'Bedrooms' in prop:
+            prop_details.append(f"- Bedrooms: {prop['Bedrooms']}")
+        if 'Area' in prop:
+            prop_details.append(f"- Area: {prop['Area']}")
+        if 'Description' in prop:
+            prop_details.append(f"- Description: {prop['Description']}")
+        
+        response_parts.append("\n".join(prop_details))
     
-    more_results = ""
-    if len(insights) > 3:
-        more_results = (f"\n\nI have {len(insights) - 3} more properties that match your criteria. "
-                        "Would you like to see more options?")
+    # Add a follow-up question
+    response_parts.append("\nWould you like more details about any of these properties?")
     
-    follow_up = ("\n\nIs there anything specific about these properties you'd like to know more about, "
-                 "or would you like to refine your search?")
-    
-    return intro + "".join(property_responses) + more_results + follow_up
+    # Join all parts with appropriate pauses
+    return "\n".join(response_parts)
 
 def get_dataset_overview(stats: dict) -> str:
     """Generate an overview of the dataset based on provided statistics."""

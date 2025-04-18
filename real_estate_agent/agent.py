@@ -24,6 +24,17 @@ class RealEstateAgent:
         self.gemini_api_key = gemini_api_key
         self.gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={self.gemini_api_key}"
         self.conversation_state = "initial"
+        self.current_transaction = None  # 'buy' or 'rent'
+        self.user_requirements = {
+            'transaction_type': None,
+            'property_type': None,
+            'layout': None,
+            'budget': None,
+            'down_payment': None,
+            'location': None,
+            'term': None,  # for rental: 'short' or 'long'
+            'ready_status': None  # 'ready' or 'off-plan'
+        }
         self.user_preferences = {}
         self.conversation_history = []
         self.current_query = ""
@@ -43,6 +54,47 @@ class RealEstateAgent:
             "Welcome! I'm your real estate expert. Tell me what you're looking for in your next home.",
             "Good day! I'm ready to assist with your property search. What kind of property are you interested in?"
         ]
+
+        self.conversation_flow = {
+            'initial': {
+                'question': "What do you want to do? (Buy/Rent)",
+                'next': 'transaction_type'
+            },
+            'transaction_type': {
+                'buy': {
+                    'question': "What type of user best describes you?",
+                    'next': 'ready_status'
+                },
+                'rent': {
+                    'question': "Are you looking to rent short term or long term?",
+                    'next': 'property_type'
+                }
+            },
+            'ready_status': {
+                'question': "Do you want ready or Off-plan?",
+                'next': 'property_type'
+            },
+            'property_type': {
+                'question': "What is your target unit?",
+                'next': 'layout'
+            },
+            'layout': {
+                'question': "What is your target layout (bedrooms)?",
+                'next': 'budget'
+            },
+            'budget': {
+                'question': "What is your budget?",
+                'next': 'down_payment'
+            },
+            'down_payment': {
+                'question': "What is your down payment budget?",
+                'next': 'location'
+            },
+            'location': {
+                'question': "Preferred Location?",
+                'next': 'summary'
+            }
+        }
 
     def _preprocess_data(self, df):
         """Preprocess the data for better search and matching."""
