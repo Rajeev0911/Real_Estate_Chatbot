@@ -490,3 +490,16 @@ function updateIcons() {
         lucide.createIcons();
     }
 }
+
+// Function to ensure speech synthesis voices are loaded
+function ensureVoicesLoaded(callback) {
+    let voices = window.speechSynthesis.getVoices();
+    if (voices.length > 0) {
+        callback(voices);
+    } else {
+        window.speechSynthesis.onvoiceschanged = () => {
+            voices = window.speechSynthesis.getVoices();
+            callback(voices);
+        };
+    }
+}

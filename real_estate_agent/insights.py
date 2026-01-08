@@ -100,7 +100,9 @@ def format_response_with_typing_effect(properties, user_query, query_details):
         prop_details.append(f"\n🏠 Property {idx + 1}:")
         prop_details.append(f"- Type: {prop.get('Type', 'N/A')}")
         prop_details.append(f"- Location: {prop.get('Location', 'N/A')}")
-        prop_details.append(f"- Price: {prop.get('Price', 'N/A'):,}")
+        if 'Bathrooms' in prop:
+            prop_details.append(f"- Bathrooms: {int(prop['Bathrooms']) if pd.notna(prop.get('Bathrooms')) else 'N/A'}")
+        prop_details.append(f"- Price: AED {int(prop.get('Price', 0)):,}")
         if 'Bedrooms' in prop:
             prop_details.append(f"- Bedrooms: {prop['Bedrooms']}")
         if 'Area' in prop:

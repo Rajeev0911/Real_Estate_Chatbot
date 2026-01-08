@@ -23,22 +23,23 @@ class RealEstateAgent:
         """Initialize the Real Estate Agent with API key, load CSV, and set up conversation state."""
         self.gemini_api_key = gemini_api_key
         self.gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={self.gemini_api_key}"
-        self.conversation_state = "initial"
+        self.conversation_state = "initial"  # Start with initial state
         self.current_transaction = None  # 'buy' or 'rent'
         self.user_requirements = {
             'transaction_type': None,
             'property_type': None,
-            'layout': None,
+            'furnishing': None,
+            'bedrooms': None,
+            'bathrooms': None,
             'budget': None,
-            'down_payment': None,
-            'location': None,
-            'term': None,  # for rental: 'short' or 'long'
-            'ready_status': None  # 'ready' or 'off-plan'
+            'min_price': None,
+            'max_price': None,
+            'location': None
         }
         self.user_preferences = {}
         self.conversation_history = []
         self.current_query = ""
-        self.questions_asked = set()  # for tracking asked questions
+        self.questions_asked = set()
 
         # Load property data from CSV
         self.knowledge_base = self.load_properties_from_csv(csv_path)
@@ -46,55 +47,8 @@ class RealEstateAgent:
         self.knowledge_base = self._preprocess_data(self.knowledge_base)
         # Analyze the preprocessed knowledge base
         self.stats = self.analyze_knowledge_base()
-
-        # Define greetings and follow-up templates (if not already defined)
-        self.greetings = [
-            "Hello! I'm your personal real estate assistant. How can I help you find your perfect property today?",
-            "Hi there! I'm here to help you find the ideal property. What are you looking for?",
-            "Welcome! I'm your real estate expert. Tell me what you're looking for in your next home.",
-            "Good day! I'm ready to assist with your property search. What kind of property are you interested in?"
-        ]
-
-        self.conversation_flow = {
-            'initial': {
-                'question': "What do you want to do? (Buy/Rent)",
-                'next': 'transaction_type'
-            },
-            'transaction_type': {
-                'buy': {
-                    'question': "What type of user best describes you?",
-                    'next': 'ready_status'
-                },
-                'rent': {
-                    'question': "Are you looking to rent short term or long term?",
-                    'next': 'property_type'
-                }
-            },
-            'ready_status': {
-                'question': "Do you want ready or Off-plan?",
-                'next': 'property_type'
-            },
-            'property_type': {
-                'question': "What is your target unit?",
-                'next': 'layout'
-            },
-            'layout': {
-                'question': "What is your target layout (bedrooms)?",
-                'next': 'budget'
-            },
-            'budget': {
-                'question': "What is your budget?",
-                'next': 'down_payment'
-            },
-            'down_payment': {
-                'question': "What is your down payment budget?",
-                'next': 'location'
-            },
-            'location': {
-                'question': "Preferred Location?",
-                'next': 'summary'
-            }
-        }
+        
+        logger.info("Real Estate Agent initialized successfully")
 
     def _preprocess_data(self, df):
         """Preprocess the data for better search and matching."""
@@ -103,33 +57,36 @@ class RealEstateAgent:
             df.columns = [col.strip() for col in df.columns]
             
             # Ensure essential columns exist
-            essential_columns = ['Price', 'Location', 'Type', 'Bedrooms', 'Area', 'Description', 'Title', 'Purpose', 'Furnishing']
+            essential_columns = ['Price', 'Location', 'Type', 'Bedrooms', 'Bathrooms', 'Area', 'Description', 'Title', 'Purpose', 'Furnishing']
             for col in essential_columns:
                 if col not in df.columns:
                     df[col] = None
             
             # Create processed columns for better text matching
-            if 'Location' in df.columns:
-                df['Processed_Location'] = df['Location'].astype(str).apply(lambda x: x.lower())
-                
-            if 'Type' in df.columns:
-                df['Processed_Type'] = df['Type'].astype(str).apply(lambda x: x.lower())
-                
-            if 'Description' in df.columns:
-                df['Processed_Description'] = df['Description'].astype(str).apply(lambda x: x.lower())
+            df['Processed_Location'] = df['Location'].astype(str).str.lower()
+            df['Processed_Type'] = df['Type'].astype(str).str.lower()
+            df['Processed_Description'] = df['Description'].astype(str).str.lower()
             
-            # Convert price to numeric
-            if 'Price' in df.columns:
-                df['Price'] = pd.to_numeric(df['Price'], errors='coerce')
+            # Clean Price: remove commas, currency symbols, and handle types
+            def clean_price(val):
+                if pd.isna(val): return np.nan
+                s = str(val).replace(',', '').replace('AED', '').strip()
+                try:
+                    return float(s)
+                except:
+                    return np.nan
+
+            df['Price'] = df['Price'].apply(clean_price)
                 
-            # Convert bedrooms to numeric
-            if 'Bedrooms' in df.columns:
-                # If bedrooms is string, extract numbers
-                if df['Bedrooms'].dtype == 'object':
-                    df['Bedrooms'] = df['Bedrooms'].astype(str).apply(
-                        lambda x: re.search(r'(\d+)', x).group(1) if re.search(r'(\d+)', x) else None
-                    )
-                df['Bedrooms'] = pd.to_numeric(df['Bedrooms'], errors='coerce')
+            # Clean Bedrooms and Bathrooms: extract numbers
+            def extract_number(val):
+                if pd.isna(val): return np.nan
+                if isinstance(val, (int, float)): return val
+                match = re.search(r'(\d+)', str(val))
+                return int(match.group(1)) if match else np.nan
+
+            df['Bedrooms'] = df['Bedrooms'].apply(extract_number)
+            df['Bathrooms'] = df['Bathrooms'].apply(extract_number)
             
             logger.info(f"Preprocessed data: {len(df)} rows")
             return df
@@ -166,6 +123,8 @@ class RealEstateAgent:
             stats['top_locations'] = df['Location'].value_counts().head(10).to_dict()
         if 'Bedrooms' in df.columns:
             stats['bedrooms'] = df['Bedrooms'].value_counts().to_dict()
+        if 'Bathrooms' in df.columns:
+            stats['bathrooms'] = df['Bathrooms'].value_counts().to_dict()
         logger.info("Knowledge base analysis complete")
         return stats
 
@@ -256,6 +215,11 @@ class RealEstateAgent:
                 bedrooms = query_details['bedrooms']
                 df = df[df['Bedrooms'] == bedrooms]
             
+            # Filter by number of bathrooms
+            if 'bathrooms' in query_details and query_details['bathrooms'] is not None:
+                bathrooms = query_details['bathrooms']
+                df = df[df['Bathrooms'] == bathrooms]
+            
             # Filter by price range
             if 'max_price' in query_details and query_details['max_price'] is not None:
                 max_price = query_details['max_price']
@@ -285,75 +249,65 @@ class RealEstateAgent:
             # Log filtering results
             logger.info(f"Filtered properties: {len(df)} remain after applying filters")
             
-            # If no properties remain, return at least the original first 5 for a fallback
-            if df.empty:
-                logger.warning("No properties match the filters, using top 5 from original dataset")
-                return self.knowledge_base.head(5)
-                
             return df
             
         except Exception as e:
             logger.error(f"Error filtering properties: {e}")
-            # In case of error, return first 5 properties as fallback
-            return self.knowledge_base.head(5)
+            return pd.DataFrame()
 
-    def _call_gemini_api(self, prompt: str) -> dict:
-        """
-        Call the Gemini API to extract structured details from the query.
-        The prompt instructs the model to return raw JSON without any markdown formatting.
-        """
-        try:
-            logger.info(f"Calling Gemini API with prompt: {prompt[:100]}...")
-            # Append additional instruction to get raw JSON output
-            refined_prompt = prompt + "\n\nPlease return only raw JSON without any markdown formatting, code fences, or additional text."
-            payload = {
-                "contents": [{"parts": [{"text": refined_prompt}]}],
-                "generationConfig": {"temperature": 0.3, "maxOutputTokens": 1024}
-            }
-            headers = {'Content-Type': 'application/json'}
-            response = requests.post(self.gemini_url, headers=headers, data=json.dumps(payload))
-        
-            if response.status_code != 200:
-                logger.error(f"Gemini API error: {response.status_code}, {response.text}")
-                return self._fallback_query_parser(prompt)
-        
-            response_json = response.json()
-            candidate = response_json.get("candidates", [{}])[0]
-        
-            # Extract text from candidate; try both possible keys
-            if "content" in candidate and "parts" in candidate["content"]:
-                generated_text = candidate["content"]["parts"][0].get("text", "")
-            elif "output" in candidate:
-                generated_text = candidate["output"]
-            else:
-                logger.error(f"Unexpected Gemini API response format: {candidate}")
-                return self._fallback_query_parser(prompt)
-        
-            # Remove markdown code fences if present
-            if "```" in generated_text:
-                json_text = re.search(r'```(?:json)?(.*?)```', generated_text, re.DOTALL)
-                generated_text = json_text.group(1) if json_text else generated_text.strip('`')
-        
-            # Extra cleaning: try to extract a JSON substring if extra text is included
-            try:
-                query_details = json.loads(generated_text)
-                return query_details
-            except json.JSONDecodeError:
-                # Attempt a rough extraction of JSON by finding the first '{' and the last '}'
-                start = generated_text.find('{')
-                end = generated_text.rfind('}') + 1
-                if start != -1 and end != -1:
-                    json_text = generated_text[start:end]
-                    try:
-                        query_details = json.loads(json_text)
-                        return query_details
-                    except json.JSONDecodeError as json_err:
-                        logger.error(f"Extraction attempt failed: {json_err}")
-                logger.error(f"Error parsing JSON from Gemini API response. Raw text: {generated_text}")
-                return self._fallback_query_parser(prompt)
-        except Exception as e:
-            logger.error(f"Error calling Gemini API: {e}")
-            return self._fallback_query_parser(prompt)
+
+    # GEMINI API - DISABLED FOR SIMPLE SEQUENTIAL FLOW
+    # def _call_gemini_api(self, prompt: str) -> dict:
+    #     """Call the Google Gemini API to extract structured query details."""
+    #     try:
+    #         logger.info(f"Calling Gemini API with prompt: {prompt[:100]}...")
+    #         payload = {
+    #             "contents": [{"parts": [{"text": prompt}]}],
+    #             "generationConfig": {
+    #                 "temperature": 0.3,
+    #                 "maxOutputTokens": 1024
+    #             }
+    #         }
+    #         headers = {'Content-Type': 'application/json'}
+    #         response = requests.post(self.gemini_url, headers=headers, data=json.dumps(payload))
+    #         # Check for the expected structure in the response
+    #         if response.status_code != 200:
+    #             logger.error(f"Gemini API error: {response.status_code}, {response.text}")
+    #             return self._fallback_query_parser(self.current_query)
+    #         
+    #         response_json = response.json()
+    #         if "candidates" not in response_json or not response_json["candidates"]:
+    #             logger.error(f"Unexpected Gemini API response format: {response_json}")
+    #             return self._fallback_query_parser(self.current_query)
+    #         
+    #         candidate = response_json["candidates"][0]
+    #     
+    #         # Handle different possible response structures
+    #         if "content" in candidate and "parts" in candidate["content"]:
+    #             generated_text = candidate["content"].parts[0].get("text", "")
+    #         elif "output" in candidate:
+    #             generated_text = candidate["output"]
+    #         else:
+    #             logger.error(f"Unable to extract text from Gemini response: {candidate}")
+    #             return self._fallback_query_parser(self.current_query)
+    #     
+    #         # Remove markdown code fences if present
+    #         if generated_text.startswith("```"):
+    #             generated_text = re.sub(r'^```(?:json)?\s*', '', generated_text)
+    #             generated_text = re.sub(r'\s*```$', '', generated_text)
+    #     
+    #         try:
+    #             query_details = json.loads(generated_text)
+    #             return query_details
+    #         except json.JSONDecodeError as json_err:
+    #             logger.error(f"Error parsing JSON from Gemini response: {json_err}")
+    #             logger.error(f"Raw response text: {generated_text}")
+    #             return self._fallback_query_parser(self.current_query)
+    # 
+    #     except Exception as e:
+    #         logger.error(f"Error calling Gemini API: {e}")
+    #         return self._fallback_query_parser(prompt)
+
 
     def _fallback_query_parser(self, prompt: str) -> dict:
         """
@@ -364,6 +318,7 @@ class RealEstateAgent:
         result = {
             "location": None,
             "bedrooms": None,
+            "bathrooms": None,
             "property_type": None,
             "max_price": None,
             "min_price": None,
@@ -382,6 +337,11 @@ class RealEstateAgent:
         bedroom_match = re.search(r'(\d+)\s+bed', query)
         if bedroom_match:
             result["bedrooms"] = int(bedroom_match.group(1))
+            
+        # Extract bathrooms
+        bathroom_match = re.search(r'(\d+)\s+bath', query)
+        if bathroom_match:
+            result["bathrooms"] = int(bathroom_match.group(1))
             
         # Extract property type
         property_types = ['house', 'apartment', 'villa', 'studio', 'townhouse']
@@ -437,8 +397,9 @@ class RealEstateAgent:
     Query: "{user_query}"
 
     Please provide a JSON response with the following keys:
-    - location: Extracted city or region (string or null)
+    - location: Extracted city or region or community (string or null)
     - bedrooms: Number of bedrooms (integer or null)
+    - bathrooms: Number of bathrooms (integer or null)
     - property_type: Type of property (string or null, options: 'house', 'apartment', 'villa', 'studio', 'townhouse')
     - max_price: Maximum budget (float or null)
     - min_price: Minimum budget (float or null)
@@ -448,7 +409,7 @@ class RealEstateAgent:
     - furnishing: Furnishing preferences (string or null, options: 'Furnished', 'Unfurnished')
 
     If the query mentions "cheap" or "affordable", set price_qualifier to that value.
-    Look for keywords related to renting (e.g., "rent", "lease") or buying (e.g., "buy", "purchase") to determine purpose.
+    Look for keywords related to renting (e.g., "rent", "lease") or buying (e.g., "buy", "purchase") to determine purpose. If no rental/purchase keyword is found but it looks like a property search, default purpose to 'Rent' as most data is for rent, or try to infer from price (large amounts usually Sale).
 
     Provide null or empty values if not specified in the query.
     """
