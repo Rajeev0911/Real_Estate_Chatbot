@@ -1,12 +1,11 @@
-
-
 * {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
 }
 
-body, html {
+body,
+html {
   height: 100%;
   font-family: 'Poppins', sans-serif;
   background: #eeeeee;
@@ -58,7 +57,7 @@ body, html {
   display: flex;
   justify-content: center;
   align-items: center;
-  box-shadow: 5px 5px 10px rgba(0,0,0,0.3);
+  box-shadow: 5px 5px 10px rgba(0, 0, 0, 0.3);
   z-index: 101;
 }
 
@@ -84,7 +83,7 @@ body, html {
   border-radius: 50%;
   transition: transform 0.3s ease, box-shadow 0.3s ease;
   animation: pulse 2.2s infinite alternate;
-  background-image: url("./rs_agent_female_dummy.jpeg");
+  background-image: url("./agent_image.jpeg");
   background-repeat: no-repeat;
   background-size: cover;
   border: 3px solid #ffffff;
@@ -95,6 +94,7 @@ body, html {
     transform: scale(1);
     box-shadow: 0 0 10px rgba(255, 255, 255, 0.4);
   }
+
   to {
     transform: scale(1.05);
     box-shadow: 0 0 20px rgba(255, 255, 255, 0.6);
@@ -250,6 +250,7 @@ body, html {
     transform: scale(1);
     box-shadow: 0 0 0 0 rgba(11, 104, 186, 0.7);
   }
+
   100% {
     transform: scale(1.1);
     box-shadow: 0 0 10px 5px rgba(11, 104, 186, 0.7);
@@ -272,6 +273,7 @@ body, html {
     transform: scale(1);
     opacity: 0.7;
   }
+
   100% {
     transform: scale(1.5);
     opacity: 0;
@@ -290,9 +292,17 @@ body, html {
 }
 
 @keyframes loading-dots {
-  0% { content: '.'; }
-  33% { content: '..'; }
-  66% { content: '...'; }
+  0% {
+    content: '.';
+  }
+
+  33% {
+    content: '..';
+  }
+
+  66% {
+    content: '...';
+  }
 }
 
 .emoji {
